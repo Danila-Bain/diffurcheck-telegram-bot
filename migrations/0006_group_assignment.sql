@@ -4,17 +4,20 @@ create table if not exists group_assignment (
     group_id            uuid            not null references "group"(id)    on delete cascade,
     solutions           bytea,
     graded_solutions    bytea,
+    available_at        timestamptz     not null    default now(),
     deadline            timestamptz,
+    completed           bool            not null    default false,
     created_at          timestamptz     not null    default now(),
     updated_at          timestamptz
 );
 select trigger_updated_at('"group_assignment"');
 
 
-
 create or replace function insert_assignment_with_groups(
     p_title text,
+    p_description text,
     p_generator text,
+    p_duration time,
     p_groups jsonb
 )
 returns void
@@ -35,8 +38,8 @@ begin
     end if;
 
 with new_assignment as (
-    insert into assignment (title, generator)
-    values (p_title, p_generator)
+    insert into assignment (title, description, generator, duration)
+    values (p_title, p_description, p_generator, p_duration)
     returning id
 ),
 groups_with_deadlines as (

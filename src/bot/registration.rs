@@ -1,7 +1,7 @@
-use sqlx::{PgPool, query_as};
+use sqlx::{PgPool};
 use teloxide::{
     Bot,
-    dispatching::{HandlerExt, UpdateFilterExt, dialogue::InMemStorage},
+    dispatching::{UpdateFilterExt, dialogue::GetChatId},
     dptree,
     prelude::*,
     types::{CallbackQuery, Message, Update},
@@ -13,10 +13,7 @@ use crate::{
         BotState, HandlerResult, MyDialogue,
         idle::{self, IdleState},
     },
-    db::{
-        helpers::{active_groups, current_academic_year},
-        model::{Group, Student},
-    },
+    db::helpers::current_academic_year,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -47,14 +44,24 @@ pub fn registration_handler()
 }
 
 pub async fn request_group(bot: Bot, msg: Message, pool: PgPool) -> HandlerResult {
-    fn group_button(group: Group) -> teloxide::types::InlineKeyboardButton {
-        teloxide::types::InlineKeyboardButton::callback::<&str, &str>(&group.name, &group.name)
+    fn group_button(group_name: &str) -> teloxide::types::InlineKeyboardButton {
+        teloxide::types::InlineKeyboardButton::callback::<&str, &str>(group_name, group_name)
     }
-    let groups = active_groups(&pool).await.unwrap_or(vec![]);
+
+    let groups = sqlx::query_scalar!(
+        r#"
+            select name from "group"
+            where academic_year = ($1)
+        "#,
+        current_academic_year()
+    )
+    .fetch_all(&pool)
+    .await?;
+
     let group_keyboard = teloxide::types::InlineKeyboardMarkup::new(
         groups
             .into_iter()
-            .map(|group| vec![group_button(group)])
+            .map(|group| vec![group_button(group.as_str())])
             .collect::<Vec<_>>(),
     );
     bot.send_message(msg.chat.id, "Выбирите группу:")
@@ -74,28 +81,25 @@ pub async fn awaiting_group(
     if let Some(ref group_name) = q.data {
         log::info!("Выбранная группа: {group_name}");
 
-        let group_id = query_as!(
-            Group,
+        let group_id = sqlx::query_scalar!(
             r#"
-                select id, name, academic_year, created_at, updated_at from "group"
+                select id from "group"
                 where name = ($1) and academic_year = ($2);
             "#,
             group_name,
             current_academic_year(),
         )
         .fetch_optional(&pool)
-        .await?
-        .map(|group| group.id);
+        .await?;
 
         if let Some(group_id) = group_id {
+            let Some(chat_id) = q.chat_id() else {
+                dialogue.update(BotState::Start).await?;
+                return Ok(());
+            };
             let text = format!("Выбранная группа: {group_name}");
 
-            if let Some(message) = q.regular_message() {
-                bot.edit_message_text(message.chat.id, message.id, text)
-                    .await?;
-            }
-
-            let chat_id = q.message.unwrap().chat().id;
+            bot.send_message(chat_id, text).await?;
 
             bot.send_message(chat_id, "Введите ваше ФИО:").await?;
 
@@ -126,24 +130,28 @@ async fn awaiting_full_name(
     group_id: Uuid,
     pool: PgPool,
 ) -> HandlerResult {
-    let full_name = msg.text().unwrap().to_string();
-    let telegram_id = msg.clone().from.unwrap().id.0 as i64;
+    let Some(full_name) = msg.text() else {
+        bot.send_message(msg.chat.id, "Пожалуйста, пришлите своё ФИО:")
+            .await?;
+        return Ok(());
+    };
+    let Some(user) = msg.clone().from else {
+        bot.send_message(msg.chat.id, "Сообщения из каналов не поддерживаются.")
+            .await?;
+        return Ok(());
+    };
+    let telegram_id = user.id.0 as i64;
+    let chat_id = msg.chat.id.0 as i64;
 
-    let student = query_as!(
-        Student,
+    let student_id = sqlx::query_scalar!(
         r#"
-        insert into student (group_id, telegram_id, full_name)
-        values ($1, $2, $3)
-        returning
-            id,
-            group_id,
-            telegram_id,
-            full_name,
-            created_at,
-            updated_at
+        insert into student (group_id, telegram_id, chat_id, full_name)
+        values ($1, $2, $3, $4)
+        returning id
         "#,
         group_id,
         telegram_id,
+        chat_id,
         full_name,
     )
     .fetch_one(&pool)
@@ -152,23 +160,12 @@ async fn awaiting_full_name(
     bot.send_message(msg.chat.id, "Регистрация пройдена!")
         .await?;
 
-    idle::help(bot, dialogue.clone(), msg, student.id, pool).await?;
-    // bot.send_message(msg.chat.id, idle::IdleCommand::descriptions().to_string())
-    //     .await?;
+    idle::help(bot, dialogue.clone(), student_id, pool).await?;
     dialogue
         .update(BotState::Idle(IdleState::AwaitingCommand {
-            student_id: student.id,
+            student_id: student_id,
         }))
         .await?;
-
-    // let students = sqlx::query_as!(
-    //     Student,
-    //     r#"select id, group_id, telegram_id, full_name, created_at, updated_at
-    //     from student"#
-    // )
-    // .fetch_all(&pool)
-    // .await?;
-    // log::debug!("{students:?}");
 
     Ok(())
 }

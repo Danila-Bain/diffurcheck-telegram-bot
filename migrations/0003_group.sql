@@ -8,5 +8,4 @@ create table if not exists "group"
     unique (name, academic_year),
     check (academic_year between 2025 and 2100)
 );
-
 select trigger_updated_at('"group"');
