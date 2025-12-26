@@ -1,13 +1,11 @@
 use sqlx::PgPool;
 use teloxide::{Bot, prelude::*, types::Message, utils::command::BotCommands};
 
-use crate::{
-    bot::{
-        BotState, HandlerResult, MyDialogue,
-        admin::AdminState,
-        idle::{IdleCommand, IdleState},
-        registration::{self, RegistrationState},
-    },
+use crate::bot::{
+    BotState, HandlerResult, MyDialogue,
+    admin::AdminState,
+    idle::{IdleCommand, IdleState},
+    registration::{self, RegistrationState},
 };
 
 pub fn start_handler()
@@ -17,26 +15,24 @@ pub fn start_handler()
 
 pub async fn start(bot: Bot, dialogue: MyDialogue, msg: Message, pool: PgPool) -> HandlerResult {
     let Some(user) = msg.clone().from else {
-        bot.send_message(msg.chat.id, "Сообщения из каналов не поддерживаются.")
-            .await?;
+        bot.send_message(
+            dialogue.chat_id(),
+            "Сообщения из каналов не поддерживаются.",
+        )
+        .await?;
         return Ok(());
     };
     let telegram_id = user.id.0 as i64;
 
-    let is_admin = sqlx::query!(
-        r#" select chat_id from admin_chat where chat_id = $1 "#,
-        msg.chat.id.0
-    )
-    .fetch_optional(&pool)
-    .await?
-    .is_some();
+    let admin_chat_id = ChatId(std::env::var("ADMIN_CHAT_ID")?.parse()?);
+    let is_admin = admin_chat_id == dialogue.chat_id();
 
-    log::debug!("is admin? {}", is_admin);
-    log::debug!("chat_id = {}", msg.chat.id.0);
-//  5062133349
-// -5062133349
+    log::debug!("is admin? {:?}", is_admin);
+    log::debug!("chat_id = {}", dialogue.chat_id());
+    //  5062133349
+    // -5062133349
     if is_admin {
-        bot.send_message(msg.chat.id, "Запуск с привелегиями админа")
+        bot.send_message(dialogue.chat_id(), "Запуск с привелегиями админа")
             .await?;
 
         dialogue
@@ -59,7 +55,7 @@ pub async fn start(bot: Bot, dialogue: MyDialogue, msg: Message, pool: PgPool) -
     match maybe_student {
         None => {
             bot.send_message(
-                msg.chat.id,
+                dialogue.chat_id(),
                 include_str!("long_messages/start_greeting.txt"),
             )
             .parse_mode(teloxide::types::ParseMode::Html)
@@ -72,9 +68,12 @@ pub async fn start(bot: Bot, dialogue: MyDialogue, msg: Message, pool: PgPool) -
                 .await?;
         }
         Some(student) => {
-            bot.send_message(msg.chat.id, format!("{}, здравствуйте!", student.full_name))
-                .await?;
-            bot.send_message(msg.chat.id, IdleCommand::descriptions().to_string())
+            bot.send_message(
+                dialogue.chat_id(),
+                format!("{}, здравствуйте!", student.full_name),
+            )
+            .await?;
+            bot.send_message(dialogue.chat_id(), IdleCommand::descriptions().to_string())
                 .await?;
             dialogue
                 .update(BotState::Idle(IdleState::AwaitingCommand {

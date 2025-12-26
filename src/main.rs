@@ -24,6 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let pool = pool.clone();
         let bot = bot.clone();
         let storage = storage.clone();
+        let admin_chat_id = ChatId(std::env::var("ADMIN_CHAT_ID")?.parse()?);
 
         async move {
             loop {
@@ -32,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     Ok(_) => {},
                     Err(err) => log::error!("closue_overdue_sumbissions failed with {err}"),
                 }
-                match submissions::process_finished_assignments(bot.clone(), pool.clone(), ACCEPTABLE_OVERDUE_MINUTES).await {
+                match submissions::process_finished_assignments(bot.clone(), pool.clone(), admin_chat_id, ACCEPTABLE_OVERDUE_MINUTES).await {
                     Ok(_) => {},
                     Err(err) => log::error!("process_finished_assignments failed with {err}"),
                 }

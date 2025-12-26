@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["assignments/test_assignment", "variant_generation"]
+members = [
+    "assignments/test_assignment", 
+    "assignments/linear_systems_2025", "misc/pretty_matrix_inverse",
+]
 
 [dependencies]
 anyhow = "1.0.100"

@@ -76,6 +76,7 @@ pub async fn close_overdue_submissions(
 pub async fn process_finished_assignments(
     bot: Bot,
     pool: PgPool,
+    admin_chat_id: ChatId,
     acceptable_overdue_minutes: f64,
 ) -> HandlerResult {
     let not_compiled_group_assignment_ids = sqlx::query_scalar!(
@@ -90,10 +91,6 @@ pub async fn process_finished_assignments(
     )
     .fetch_all(&pool)
     .await?;
-
-    let admin_chat_ids = sqlx::query_scalar!(r#"select chat_id from admin_chat"#)
-        .fetch_all(&pool)
-        .await?;
 
     for group_assignment_id in not_compiled_group_assignment_ids.into_iter() {
         let pdf = compile_group_assignment_pdf(group_assignment_id, pool.clone()).await?;
@@ -110,14 +107,12 @@ pub async fn process_finished_assignments(
         .execute(&pool)
         .await?;
 
-        for chat_id in admin_chat_ids.iter() {
-            bot.send_document(
-                ChatId(*chat_id),
-                InputFile::memory(pdf.clone())
-                    .file_name(format!("solutions_{group_assignment_id}.pdf")),
-            )
-            .await?;
-        }
+        bot.send_document(
+            admin_chat_id,
+            InputFile::memory(pdf.clone())
+                .file_name(format!("solutions_{group_assignment_id}.pdf")),
+        )
+        .await?;
     }
 
     Ok(())
