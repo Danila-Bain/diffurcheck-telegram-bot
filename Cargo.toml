@@ -6,7 +6,9 @@ edition = "2024"
 [workspace]
 members = [
     "assignments/test_assignment", 
-    "assignments/linear_systems_2025", "misc/pretty_matrix_inverse",
+    "assignments/linear_systems_2025", 
+    "assignments/first_order_equations_2025", 
+    "misc/pretty_matrix_inverse",
 ]
 
 [dependencies]
