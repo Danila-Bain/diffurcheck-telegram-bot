@@ -40,7 +40,7 @@ The variable `DATABASE_URL` is also used by `sqlx` commands to connect to databa
 For `arch-linux`, I used the following commands
 ```
 sudo pacman -Syu postgresql
-sudo -iu postgres initdb --locale en_US.UTF-8 -D /var/lib/postgres/data
+sudo -iu postgres initdb --locale ru_RU.UTF-8 -D /var/lib/postgres/data
 
 sudo systemctl enable postgresql.service
 sudo systemctl start postgresql.service
@@ -52,17 +52,17 @@ cargo install sqlx-cli --no-default-features --features postgres,rustls
 ## Database management
 Then, to create new database:
 ```
-sqlx database create
+cargo sqlx database create
 ```
 
 To apply new migrations:
 ```
-sqlx migrate run
+cargo sqlx migrate run
 ```  
 
 To nuke current database and reapply all migrations:
 ```
-sqlx database reset
+cargo sqlx database reset
 ```
 
 ## Run
